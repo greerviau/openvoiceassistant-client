@@ -1,7 +1,8 @@
-import sounddevice as sd
-import numpy as np
-from openwakeword.model import Model
 import time
+
+import numpy as np
+import sounddevice as sd
+from openwakeword.model import Model
 
 # Get microphone stream
 CHANNELS = 1
@@ -16,16 +17,15 @@ n_models = len(owwModel.models.keys())
 if __name__ == "__main__":
     # Generate output string header
     print("\n\n")
-    print("#"*100)
+    print("#" * 100)
     print("Listening for wakewords...")
-    print("#"*100)
-    
-    while True:    
+    print("#" * 100)
+
+    while True:
         owwModel.reset()
-        with sd.InputStream(samplerate=RATE, 
-                            channels=CHANNELS, 
-                            blocksize=CHUNK,
-                            dtype="int16") as stream:
+        with sd.InputStream(
+            samplerate=RATE, channels=CHANNELS, blocksize=CHUNK, dtype="int16"
+        ) as stream:
             while True:
                 # Get audio
                 chunk, _ = stream.read(CHUNK)

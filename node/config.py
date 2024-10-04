@@ -1,16 +1,18 @@
-import os
 import json
+import logging
+import os
+import random
 import typing
 import uuid
-import random
-import logging
+
 logger = logging.getLogger("config")
 
-from node.utils.hardware import list_speakers, list_microphones
+from node.utils.hardware import list_microphones, list_speakers
 
 loc = os.path.realpath(os.path.dirname(__file__))
 config_path = f"{loc}/config.json"
 config = {}
+
 
 def get(*keys: typing.List[str]) -> typing.Any:
     global config
@@ -23,6 +25,7 @@ def get(*keys: typing.List[str]) -> typing.Any:
             return None
     return dic
 
+
 def set(*keys: typing.List[typing.Any]) -> typing.Any:
     global config
     keys = list(keys)
@@ -33,16 +36,19 @@ def set(*keys: typing.List[typing.Any]) -> typing.Any:
     d[keys[-1]] = value
     save_config()
     return value
-    
+
+
 def config_exists() -> bool:
     global config_path
     return os.path.exists(config_path)
+
 
 def save_config():
     global config, config_path
     with open(config_path, "w") as config_file:
         config_file.write(json.dumps(config, indent=4))
     logger.debug("Config saved")
+
 
 def verify_config(config: typing.Dict, default: typing.Dict):
     if list(default.keys()) == list(config.keys()):
@@ -56,6 +62,7 @@ def verify_config(config: typing.Dict, default: typing.Dict):
             config_clone.pop(key)
     return config_clone
 
+
 def load_config() -> typing.Dict:
     global config, config_path
     logger.info(f"Loading config: {config_path}")
@@ -68,13 +75,14 @@ def load_config() -> typing.Dict:
         config = json.load(open(config_path, "r"))
         config = verify_config(config, __default_config())
 
+
 def __default_config() -> typing.Dict:
     def check_speex():
-        try: 
-            import speexdsp_ns 
+        try:
             return True
-        except: 
+        except:
             return False
+
     random.seed(hex(uuid.getnode()))
     node_id = f"{uuid.UUID(bytes=bytes(random.getrandbits(8) for _ in range(16)), version=4).hex}"
 
@@ -89,11 +97,12 @@ def __default_config() -> typing.Dict:
         "vad_sensitivity": 3,
         "vad_threshold": 0.0,
         "speex_noise_suppression": False,
-        "speex_available": check_speex(),   
-        "omni_directional_wake_word": False, 
+        "speex_available": check_speex(),
+        "omni_directional_wake_word": False,
         "mic_index": list_microphones()[0]["idx"],
         "speaker_index": list_speakers()[0]["idx"],
-        "volume": 100
+        "volume": 100,
     }
+
 
 load_config()

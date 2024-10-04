@@ -1,5 +1,6 @@
 import typing
 
+
 class NodeConfig(typing.TypedDict):
     node_id: str
     node_name: str

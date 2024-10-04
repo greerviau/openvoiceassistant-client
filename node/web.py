@@ -1,19 +1,20 @@
-import flask
-import os
-import requests
-import threading
 import logging
+import os
+import threading
+
+import flask
+import requests
+
 logger = logging.getLogger("werkzeug")
 
-from node import Node
-from node import config
-from node.dir import FILESDIR, WAKEWORDMODELSDIR, LOGFILE
+from node import Node, config
+from node.dir import FILESDIR, LOGFILE, WAKEWORDMODELSDIR
+from node.schemas import NodeConfig
 from node.updater import Updater
 from node.utils.hardware import list_microphones, list_speakers
-from node.schemas import NodeConfig
+
 
 def create_app(node: Node, updater: Updater):
-
     app = flask.Flask("Node")
 
     @app.route("/api", methods=["GET"])
@@ -26,16 +27,16 @@ def create_app(node: Node, updater: Updater):
             if updater.updating:
                 status = "updating"
             return {
-                    "id": config.get("id"),
-                    "version": updater.version,
-                    "status": status,
-                    "update_available": updater.update_available,
-                    "update_version": updater.update_version
-                    }, 200
-        except Exception as e:
+                "id": config.get("id"),
+                "version": updater.version,
+                "status": status,
+                "update_available": updater.update_available,
+                "update_version": updater.update_version,
+            }, 200
+        except Exception:
             logger.exception("Exception in GET /api")
             return {}, 400
-    
+
     @app.route("/api/update", methods=["POST"])
     def update():
         try:
@@ -46,15 +47,15 @@ def create_app(node: Node, updater: Updater):
                 return {}, 200
             else:
                 return {"No update available"}, 400
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in GET /api")
             return {}, 400
-    
+
     @app.route("/api/restart", methods=["POST"])
     def restart():
         try:
             node.restart()
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in POST /api/restart")
             return {}, 400
         return {}, 200
@@ -63,7 +64,7 @@ def create_app(node: Node, updater: Updater):
     def get_config() -> NodeConfig:
         try:
             return config.get(), 200
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in GET /api/config")
             return {}, 400
 
@@ -74,19 +75,23 @@ def create_app(node: Node, updater: Updater):
             config.set("name", node_config["name"])
             config.set("area", node_config["area"])
             config.set("wake_word", node_config["wake_word"])
-            config.set("wake_word_conf_threshold", node_config["wake_word_conf_threshold"])
+            config.set(
+                "wake_word_conf_threshold", node_config["wake_word_conf_threshold"]
+            )
             config.set("wakeup_sound", node_config["wakeup_sound"])
             config.set("vad_sensitivity", node_config["vad_sensitivity"])
             config.set("vad_threshold", node_config["vad_threshold"])
-            config.set("speex_noise_suppression", node_config["speex_noise_suppression"])
+            config.set(
+                "speex_noise_suppression", node_config["speex_noise_suppression"]
+            )
             config.set("mic_index", node_config["mic_index"])
             config.set("speaker_index", node_config["speaker_index"])
             config.set("volume", node_config["volume"])
             return node_config, 200
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in PUT /api/config")
             return {}, 400
-       
+
     @app.route("/api/play/audio", methods=["POST"])
     def play_audio():
         try:
@@ -98,11 +103,11 @@ def create_app(node: Node, updater: Updater):
                 wav_file.write(data)
             node.audio_player.interrupt()
             node.audio_player.play_audio_file(audio_file_path, asynchronous=True)
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in POST /api/play/audio")
             return {}, 400
         return {}, 200
-    
+
     @app.route("/api/play/file", methods=["POST"])
     def play_file():
         try:
@@ -112,18 +117,22 @@ def create_app(node: Node, updater: Updater):
             audio_file_path = os.path.join(FILESDIR, file)
             if os.file.exists(audio_file_path):
                 node.audio_player.interrupt()
-                node.audio_player.play_audio_file(audio_file_path, asynchronous=True, loop=loop)
+                node.audio_player.play_audio_file(
+                    audio_file_path, asynchronous=True, loop=loop
+                )
             else:
                 return {"error": "Could not find file"}, 404
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in POST /api/play/file")
             return {}, 400
         return {}, 200
-    
+
     @app.route("/api/announce/<text>", methods=["POST"])
     def announce(text: str):
         try:
-            respond_response = requests.get(f"{node.hub_api_url}/synthesizer/synthesize/text/{text}")
+            respond_response = requests.get(
+                f"{node.hub_api_url}/synthesizer/synthesize/text/{text}"
+            )
             context = respond_response.json()
             response_audio_data = context["response_audio_data"]
             data = bytes.fromhex(response_audio_data)
@@ -132,27 +141,27 @@ def create_app(node: Node, updater: Updater):
                 wav_file.write(data)
             node.audio_player.interrupt()
             node.audio_player.play_audio_file(audio_file_path, asynchronous=True)
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in POST /api/announce/<text>")
             return {}, 400
         return {}, 200
-    
+
     @app.route("/api/timer/set", methods=["POST"])
     def set_timer():
         try:
             data = flask.request.json
             durration = data["durration"]
             node.set_timer(durration)
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in POST /api/timer/set")
             return {}, 400
         return {}, 200
-    
+
     @app.route("/api/timer/stop", methods=["POST"])
     def stop_timer():
         try:
             node.stop_timer()
-        except AttributeError as e:
+        except AttributeError:
             logger.exception("Exception in POST /api/timer/stop")
             return {}, 400
         return {}, 200
@@ -160,13 +169,11 @@ def create_app(node: Node, updater: Updater):
     @app.route("/api/timer/remaining", methods=["GET"])
     def timer_remaining_time():
         try:
-            return {
-                "time_remaining": node.get_timer()
-            }, 200
-        except AttributeError as e:
+            return {"time_remaining": node.get_timer()}, 200
+        except AttributeError:
             logger.exception("Exception in GET /api/timer/remaining")
             return {}, 400
-    
+
     @app.route("/api/volume/set", methods=["PUT"])
     def set_volume():
         try:
@@ -174,7 +181,7 @@ def create_app(node: Node, updater: Updater):
             volume = data["volume_percent"]
             config.set("volume", volume)
             node.set_volume(volume)
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in PUT /api/volume/set")
             return {}, 400
         return {}, 200
@@ -183,7 +190,7 @@ def create_app(node: Node, updater: Updater):
     def get_microphones():
         try:
             return list_microphones(), 200
-        except AttributeError as e:
+        except AttributeError:
             logger.exception("Exception in GET /api/hardware/microphones")
             return {}, 400
 
@@ -191,18 +198,22 @@ def create_app(node: Node, updater: Updater):
     def get_speakers():
         try:
             return list_speakers(), 200
-        except AttributeError as e:
+        except AttributeError:
             logger.exception("Exception in GET /api/hardware/speakers")
             return {}, 400
-    
+
     @app.route("/api/wake_word_models", methods=["GET"])
     def get_wake_word_models():
         try:
-            return [model.split(".")[0] for model in os.listdir(WAKEWORDMODELSDIR) if ".onnx" in model], 200
-        except AttributeError as e:
+            return [
+                model.split(".")[0]
+                for model in os.listdir(WAKEWORDMODELSDIR)
+                if ".onnx" in model
+            ], 200
+        except AttributeError:
             logger.exception("Exception in GET /api/wake_word_models")
             return {}, 400
-    
+
     @app.route("/api/upload/wake_word_model", methods=["POST"])
     def upload_wake_word():
         try:
@@ -219,8 +230,8 @@ def create_app(node: Node, updater: Updater):
                 with open(filename, "wb") as file_to_save:
                     file_to_save.write(file.read())
             else:
-               raise Exception("Invalid file type")
-        except Exception as e:
+                raise Exception("Invalid file type")
+        except Exception:
             logger.exception("Exception in POST /api/wake_word_models/upload")
             return {}, 400
         return {}, 200
@@ -239,12 +250,12 @@ def create_app(node: Node, updater: Updater):
             filename = os.path.join(FILESDIR, file.filename)
             with open(filename, "wb") as file_to_save:
                 file_to_save.write(file.read())
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in POST /api/upload_file")
             return {}, 400
         return {}, 200
-    
-    @app.route("/api/logs", methods=["GET"], defaults={'n': 10})
+
+    @app.route("/api/logs", methods=["GET"], defaults={"n": 10})
     @app.route("/api/logs/<n>", methods=["GET"])
     def get_logs(n):
         try:
@@ -253,15 +264,18 @@ def create_app(node: Node, updater: Updater):
             with open(LOGFILE, "r") as file:
                 for line in file.readlines()[-n:]:
                     if "ERROR" in line:
-                        log_lines.append(f'<pre><span class="text-red-400">{line}</span></pre>')
+                        log_lines.append(
+                            f'<pre><span class="text-red-400">{line}</span></pre>'
+                        )
                     elif "WARNING" in line:
-                        log_lines.append(f'<pre><span class="text-orange-300">{line}</span></pre>')
+                        log_lines.append(
+                            f'<pre><span class="text-orange-300">{line}</span></pre>'
+                        )
                     else:
-                        log_lines.append(f'<pre>{line}</pre>')
+                        log_lines.append(f"<pre>{line}</pre>")
                 return log_lines
-        except Exception as e:
+        except Exception:
             logger.exception("Exception in GET /api/logs")
             return {}, 400
-        
+
     return app
-    
