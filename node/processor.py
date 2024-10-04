@@ -1,15 +1,18 @@
-import requests
+import logging
 import os
 import time
-import logging
+
+import requests
+
 logger = logging.getLogger("processor")
 
 from node.dir import FILESDIR
 
-class Processor():
+
+class Processor:
     def __init__(self, node):
         self.node = node
-        
+
         self.hub_callback = ""
 
     def process_audio(self):
@@ -22,7 +25,9 @@ class Processor():
 
         time_sent = time.time()
         try:
-            command_audio_data = open(os.path.join(FILESDIR, "command.wav"), "rb").read()
+            command_audio_data = open(
+                os.path.join(FILESDIR, "command.wav"), "rb"
+            ).read()
         except:
             logger.error("No command audio file")
 
@@ -33,21 +38,20 @@ class Processor():
             "command_audio_data": command_audio_data.hex(),
             "hub_callback": self.hub_callback,
             "last_time_engaged": self.node.last_time_engaged,
-            "time_sent": time_sent
+            "time_sent": time_sent,
         }
 
         self.hub_callback = ""
 
         try:
             respond_response = requests.post(
-                f"{self.node.hub_api_url}/respond/audio",
-                json=payload
+                f"{self.node.hub_api_url}/respond/audio", json=payload
             )
         except Exception as e:
             logger.error(f"Lost connection to HUB | {repr(e)}")
             return
 
-        try:         
+        try:
             respond_response.raise_for_status()
 
             context = respond_response.json()
@@ -61,7 +65,9 @@ class Processor():
             logger.info(f"Conf: {context['conf']}")
             logger.info(f"Response: {response}")
             logger.info("Deltas")
-            logger.info(f"- Time to Send: {context['time_received'] - context['time_sent']}")
+            logger.info(
+                f"- Time to Send: {context['time_received'] - context['time_sent']}"
+            )
             logger.info(f"- Transcribe: {context['time_to_transcribe']}")
             logger.info(f"- Understand: {context['time_to_understand']}")
             logger.info(f"- Action: {context['time_to_action']}")
@@ -69,7 +75,7 @@ class Processor():
             logger.info(f"- Run Pipeline: {context['time_to_run_pipeline']}")
             logger.info(f"- Time to Return: {time.time() - context['time_returned']}")
             logger.info(f"- Total: {time.time() - context['time_sent']}")
-            
+
             if response:
                 if self.node.led_controller:
                     self.node.led_controller.speak()
@@ -78,19 +84,20 @@ class Processor():
 
                 self.hub_callback = context["hub_callback"]
 
-                if self.hub_callback: self.node.engaged = True
-                
+                if self.hub_callback:
+                    self.node.engaged = True
+
                 response_audio_data = context["response_audio_data"]
                 data = bytes.fromhex(response_audio_data)
                 response_file_path = os.path.join(FILESDIR, "response.wav")
                 with open(response_file_path, "wb") as wav_file:
                     wav_file.write(data)
-                        
+
                 self.node.audio_player.interrupt()
                 self.node.audio_player.play_audio_file(response_file_path)
 
             else:
                 logger.error("No response from HUB")
-            
-        except Exception as e:
+
+        except Exception:
             logger.exception("Exception while processing audio")

@@ -1,21 +1,32 @@
-import time
+import logging
 import os
 import threading
+import time
+
 import requests
-import logging
+
 logger = logging.getLogger("node")
 
 from node import config
+from node.audio_player import AudioPlayer
 from node.dir import BASEDIR, SOUNDSDIR
 from node.listener import Listener
-from node.audio_player import AudioPlayer
 from node.processor import Processor
 from node.timer import Timer
-from node.utils.hardware import list_microphones, select_mic, get_supported_samplerates, list_speakers, select_speaker
+from node.utils.hardware import (
+    get_supported_samplerates,
+    list_microphones,
+    list_speakers,
+    select_mic,
+    select_speaker,
+)
 from node.utils.network import get_my_ip, scan_for_hub
 
+
 class Node:
-    def __init__(self, no_sync: bool, sync_up: bool, hub_ip: str, hub_port: int, port: int):
+    def __init__(
+        self, no_sync: bool, sync_up: bool, hub_ip: str, hub_port: int, port: int
+    ):
         self.no_sync = no_sync
         self.sync_up = sync_up
         if hub_ip:
@@ -73,41 +84,49 @@ class Node:
 
         hub_api_url = f"http://{hub_ip}:{self.hub_port}/api"
 
-        sync_data = {     
-                "id": node_id,
-                "name": node_name,
-                "area": node_area,
-                "version": version,
-                "address": f"{device_ip}:{self.port}",
-                "wake_word": wake_word,
-                "wake_word_conf_threshold": wake_word_conf_threshold, 
-                "wakeup_sound": wakeup_sound,
-                "vad_sensitivity": vad_sensitivity,
-                "vad_threshold": vad_threshold,
-                "speex_noise_suppression": speex_noise_suppression,
-                "speex_available": speex_available,
-                "omni_directional_wake_word": omni_directional_wake_word,
-                "mic_index": mic_index,
-                "speaker_index": speaker_index,
-                "volume": volume,
-                "restart_required": False
-            }
+        sync_data = {
+            "id": node_id,
+            "name": node_name,
+            "area": node_area,
+            "version": version,
+            "address": f"{device_ip}:{self.port}",
+            "wake_word": wake_word,
+            "wake_word_conf_threshold": wake_word_conf_threshold,
+            "wakeup_sound": wakeup_sound,
+            "vad_sensitivity": vad_sensitivity,
+            "vad_threshold": vad_threshold,
+            "speex_noise_suppression": speex_noise_suppression,
+            "speex_available": speex_available,
+            "omni_directional_wake_word": omni_directional_wake_word,
+            "mic_index": mic_index,
+            "speaker_index": speaker_index,
+            "volume": volume,
+            "restart_required": False,
+        }
 
         synced = False
         while not synced:
             try:
                 if sync_up:
                     logger.info("Pushing local configuration to HUB")
-                    response = requests.put(f"{hub_api_url}/node/{node_id}/sync_up", json=sync_data, timeout=5)
+                    response = requests.put(
+                        f"{hub_api_url}/node/{node_id}/sync_up",
+                        json=sync_data,
+                        timeout=5,
+                    )
                 else:
                     logger.info("Pulling configuration from HUB")
-                    response = requests.put(f"{hub_api_url}/node/{node_id}/sync_down", json=sync_data, timeout=5)
-            
+                    response = requests.put(
+                        f"{hub_api_url}/node/{node_id}/sync_down",
+                        json=sync_data,
+                        timeout=5,
+                    )
+
                 if response.status_code != 200:
                     raise RuntimeError(response.json()["detail"])
                 else:
                     synced = True
-            except Exception as e:
+            except Exception:
                 logger.error("HUB Sync Failed")
                 logger.info("Retrying in 30 seconds...")
                 time.sleep(30)
@@ -120,24 +139,31 @@ class Node:
             config.set("name", config_json["name"])
             config.set("area", config_json["area"])
             config.set("wake_word", config_json["wake_word"])
-            config.set("wake_word_conf_threshold", config_json["wake_word_conf_threshold"])
+            config.set(
+                "wake_word_conf_threshold", config_json["wake_word_conf_threshold"]
+            )
             config.set("wakeup_sound", config_json["wakeup_sound"])
             config.set("vad_sensitivity", config_json["vad_sensitivity"])
             config.set("vad_threshold", config_json["vad_threshold"])
-            config.set("speex_noise_suppression", config_json["speex_noise_suppression"])
-            config.set("omni_directional_wake_word", config_json["omni_directional_wake_word"])
+            config.set(
+                "speex_noise_suppression", config_json["speex_noise_suppression"]
+            )
+            config.set(
+                "omni_directional_wake_word", config_json["omni_directional_wake_word"]
+            )
             config.set("mic_index", config_json["mic_index"])
             config.set("speaker_index", config_json["speaker_index"])
             config.set("volume", config_json["volume"])
 
-        except Exception as e:
+        except Exception:
             logger.exception("HUB Sync Failed")
             raise
 
         logger.info("Sync Complete!")
 
     def initialize(self):
-        if not self.no_sync: self.sync(self.sync_up)
+        if not self.no_sync:
+            self.sync(self.sync_up)
         logger.info("Initializing...")
 
         self.timer = None
@@ -150,7 +176,9 @@ class Node:
         self.wake_word = config.get("wake_word")
         self.wakeup_sound = config.get("wakeup_sound")
         self.wake_word_conf_threshold = config.get("wake_word_conf_threshold")
-        self.speex_noise_suppression = config.get("speex_noise_suppression") and config.get("speex_available")
+        self.speex_noise_suppression = config.get(
+            "speex_noise_suppression"
+        ) and config.get("speex_available")
         self.omni_directional_wake_word = config.get("omni_directional_wake_word")
         self.mic_idx = config.get("mic_index")
         self.speaker_idx = config.get("speaker_index")
@@ -175,7 +203,9 @@ class Node:
             self.sync(sync_up=True)
 
         logger.info("Microphone supported sample rates")
-        supported_rates = get_supported_samplerates(self.mic_idx, [16000, 48000, 32000, 8000])
+        supported_rates = get_supported_samplerates(
+            self.mic_idx, [16000, 48000, 32000, 8000]
+        )
         [logger.info(f"- {rate}") for rate in supported_rates]
 
         self.sample_rate = supported_rates[0]
@@ -209,7 +239,7 @@ class Node:
         logger.info(f"- Vad Thresh:       {self.vad_threshold}")
         logger.info(f"- Noise Suppress:   {self.speex_noise_suppression}")
         logger.info(f"- Wakeup Sound:     {self.wakeup_sound}")
-        logger.info(f"IO Settings")
+        logger.info("IO Settings")
         logger.info(f"- Microphone:       {self.mic_tag}")
         logger.info(f"- Microphone IDX:   {self.mic_idx}")
         logger.info(f"- Speaker:          {self.speaker_tag}")
@@ -221,6 +251,7 @@ class Node:
 
         try:
             from node.utils.leds import Pixels, Respeaker4MicHat
+
             if "seeed-4mic-voicecard" in self.mic_tag:
                 self.led_controller = Respeaker4MicHat()
             else:
@@ -230,18 +261,21 @@ class Node:
 
         try:
             import alsaaudio
+
             mixer_card = alsaaudio.mixers(cardindex=self.speaker_idx)[0]
-            self.mixer = alsaaudio.Mixer(mixer_card, cardindex=self.speaker_idx, device=mixer_card)
+            self.mixer = alsaaudio.Mixer(
+                mixer_card, cardindex=self.speaker_idx, device=mixer_card
+            )
             self.set_volume(self.volume)
-        except Exception as e:
-            logger.error(f"Failed to initialize mixer")
+        except Exception:
+            logger.error("Failed to initialize mixer")
             self.mixer = None
 
         # INITIALIZING COMPONENTS
         self.audio_player = AudioPlayer(self)
         self.listener = Listener(self)
         self.processor = Processor(self)
-    
+
     def run(self):
         self.initialize()
         logger.info("Mainloop running")
@@ -255,7 +289,7 @@ class Node:
                 break
             self.processor.process_audio()
             if self.led_controller:
-                self.led_controller.off()         
+                self.led_controller.off()
         logger.warning("Mainloop end")
 
     def set_volume(self, volume: int):
@@ -268,10 +302,14 @@ class Node:
 
     def set_timer(self, durration_seconds: int):
         if self.timer == None:
+
             def timer_finished():
                 self.timer.cancel()
                 self.timer = None
-                self.audio_player.play_audio_file(os.path.join(SOUNDSDIR, "alarm.wav"), asynchronous=True, loop=True)
+                self.audio_player.play_audio_file(
+                    os.path.join(SOUNDSDIR, "alarm.wav"), asynchronous=True, loop=True
+                )
+
             self.timer = Timer(durration_seconds, timer_finished)
             self.timer.start()
 
